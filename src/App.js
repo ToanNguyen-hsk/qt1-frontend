@@ -31,39 +31,53 @@ function App() {
   };
 
   const handleExportZipFull = async () => {
-    if (carFiles.length === 0) return alert("Vui lòng nạp danh sách file CaRs ở Cột 2 trước!");
-    setIsExporting(true);
-    setProgress(5);
-    setCurrentProcessingFile('Đang bóc tách danh mục tài liệu & Ngày đệ trình từ Thư Cover EPC...');
-
-    const totalFiles = carFiles.length;
-    for (let i = 0; i < totalFiles; i++) {
-      let msg = `Đang định dạng & nhân bản Sheet: ${carFiles[i].name}`;
-      if (processMode === 'number_filled_cars') {
-        const assigned = parseInt(startCarNo || 0) + i;
-        msg = `Đang gán số CaR ${assigned} & bảo toàn nội dung: ${carFiles[i].name}`;
-      } else if (processMode === 'new_cars') {
-        const assigned = parseInt(startCarNo || 0) + i;
-        msg = `Đang gán số CaR ${assigned} & tạo Round 1: ${carFiles[i].name}`;
-      } else if (processMode === 'pre_prepared') {
-        msg = `Đang trích xuất tự động Status từ file: ${carFiles[i].name}`;
-      }
-      setCurrentProcessingFile(msg);
-      setProgress(10 + Math.round(((i + 1) / totalFiles) * 75));
-      await new Promise(resolve => setTimeout(resolve, 20));
+    if (processMode === 'no_car_letter') {
+      if (!coverFile) return alert("Vui lòng nạp Thư Cover ở Cột 1 trước!");
+    } else {
+      if (carFiles.length === 0) return alert("Vui lòng nạp danh sách file CaRs ở Cột 2 trước!");
     }
 
-    setCurrentProcessingFile('Đang điền dữ liệu Form Word gốc & Đóng gói ZIP trực tiếp...');
-    setProgress(90);
+    setIsExporting(true);
+    setProgress(10);
+    setCurrentProcessingFile('Đang bóc tách danh mục tài liệu & Ngày đệ trình từ Thư Cover EPC...');
+
+    if (processMode === 'no_car_letter') {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setProgress(50);
+      setCurrentProcessingFile('Đang đồng bộ Header/Footer & sinh Tờ trình TV và Thư tiếng Anh...');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setProgress(85);
+    } else {
+      const totalFiles = carFiles.length;
+      for (let i = 0; i < totalFiles; i++) {
+        let msg = `Đang định dạng & nhân bản Sheet: ${carFiles[i].name}`;
+        if (processMode === 'number_filled_cars') {
+          const assigned = parseInt(startCarNo || 0) + i;
+          msg = `Đang gán số CaR ${assigned} & bảo toàn nội dung: ${carFiles[i].name}`;
+        } else if (processMode === 'new_cars') {
+          const assigned = parseInt(startCarNo || 0) + i;
+          msg = `Đang gán số CaR ${assigned} & tạo Round 1: ${carFiles[i].name}`;
+        } else if (processMode === 'pre_prepared') {
+          msg = `Đang trích xuất tự động Status từ file: ${carFiles[i].name}`;
+        }
+        setCurrentProcessingFile(msg);
+        setProgress(10 + Math.round(((i + 1) / totalFiles) * 75));
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      setCurrentProcessingFile('Đang điền dữ liệu Form Word gốc & Đóng gói ZIP trực tiếp...');
+      setProgress(90);
+    }
 
     const formData = new FormData();
     if (coverFile) formData.append('cover_file', coverFile);
-    carFiles.forEach(file => formData.append('files', file));
+    if (processMode !== 'no_car_letter') {
+      carFiles.forEach(file => formData.append('files', file));
+    }
     formData.append('mode', processMode);
     formData.append('qti_no', qtiNo.trim());
     formData.append('start_car_no', startCarNo.trim());
 
-    if (processMode !== 'pre_prepared') {
+    if (processMode !== 'pre_prepared' && processMode !== 'no_car_letter') {
       formData.append('metadata', JSON.stringify(carStatuses));
     } else {
       formData.append('metadata', JSON.stringify({})); 
@@ -104,7 +118,7 @@ function App() {
       setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1000);
       
       setProgress(100);
-      setCurrentProcessingFile('Đã xuất trọn bộ hồ sơ thành công!');
+      setCurrentProcessingFile(processMode === 'no_car_letter' ? 'Đã xuất 2 file Thư Word thành công!' : 'Đã xuất trọn bộ hồ sơ thành công!');
     } catch (err) {
       alert("LỖI HỆ THỐNG: " + err.message);
       setProgress(0);
@@ -115,6 +129,7 @@ function App() {
   };
 
   const isNumberedMode = processMode === 'new_cars' || processMode === 'number_filled_cars';
+  const isExportDisabled = isExporting || (processMode === 'no_car_letter' ? !coverFile : carFiles.length === 0);
 
   return (
     <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', backgroundColor: '#f1f5f9', minHeight: '100vh', padding: '20px' }}>
@@ -133,7 +148,7 @@ function App() {
           )}
         </div>
 
-        {/* CỘT 2: 4 MỤC LỰA CHỌN */}
+        {/* CỘT 2: 5 MỤC LỰA CHỌN */}
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h3 style={{ borderBottom: '2px solid #0d9488', paddingBottom: '8px', color: '#0f766e', marginTop: 0 }}>CỘT 2: CARs & TÙY CHỌN KẾT QUẢ</h3>
           
@@ -159,7 +174,19 @@ function App() {
                 <input type="radio" name="mode" value="new_cars" checked={processMode === 'new_cars'} onChange={() => setProcessMode('new_cars')} style={{ marginRight: '8px' }} />
                 CaR mới (cấp số)
               </label>
+
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#0284c7', fontWeight: processMode === 'no_car_letter' ? 'bold' : 'normal' }}>
+                <input type="radio" name="mode" value="no_car_letter" checked={processMode === 'no_car_letter'} onChange={() => setProcessMode('no_car_letter')} style={{ marginRight: '8px' }} />
+                Trả lời thư, không có CaR
+              </label>
             </div>
+
+            {/* Thông báo cho chế độ Trả lời thư không có CaR */}
+            {processMode === 'no_car_letter' && (
+              <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#e0f2fe', borderRadius: '6px', border: '1px solid #7dd3fc', fontSize: '12px', color: '#0369a1' }}>
+                💡 <b>Ghi chú:</b> Chế độ này không cần nạp file CaR. Hệ thống sẽ bóc tách thông tin từ Thư Cover ở Cột 1 để tạo ngay <b>2 file Word</b> (Tờ trình Tiếng Việt & Thư Tiếng Anh).
+              </div>
+            )}
 
             {/* Ô nhập số khi chọn chế độ cấp số */}
             {isNumberedMode && (
@@ -181,46 +208,50 @@ function App() {
             )}
           </div>
 
-          <input type="file" multiple accept=".xlsx,.xls" onChange={handleCarFilesChange} style={{ width: '100%', marginBottom: '15px' }} />
-          
-          {carFiles.length > 0 && (
-            <div style={{ maxHeight: '420px', overflowY: 'auto', marginBottom: '15px' }}>
-              {carFiles.map((file, idx) => {
-                const assignedNum = parseInt(startCarNo || 0) + idx;
-                const formattedNum = assignedNum < 10000 ? String(assignedNum).padStart(4, '0') : assignedNum;
-                return (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '8px', marginBottom: '6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                    <div style={{ width: '65%', overflow: 'hidden' }}>
-                      <div style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
-                        {file.name}
+          {processMode !== 'no_car_letter' && (
+            <>
+              <input type="file" multiple accept=".xlsx,.xls" onChange={handleCarFilesChange} style={{ width: '100%', marginBottom: '15px' }} />
+              
+              {carFiles.length > 0 && (
+                <div style={{ maxHeight: '420px', overflowY: 'auto', marginBottom: '15px' }}>
+                  {carFiles.map((file, idx) => {
+                    const assignedNum = parseInt(startCarNo || 0) + idx;
+                    const formattedNum = assignedNum < 10000 ? String(assignedNum).padStart(4, '0') : assignedNum;
+                    return (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '8px', marginBottom: '6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ width: '65%', overflow: 'hidden' }}>
+                          <div style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
+                            {file.name}
+                          </div>
+                          {isNumberedMode && (
+                            <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold' }}>
+                              Mã gán: {formattedNum} CaRs
+                            </span>
+                          )}
+                        </div>
+                        
+                        {processMode !== 'pre_prepared' ? (
+                          <select 
+                            value={carStatuses[file.name] || 'APP'} 
+                            onChange={(e) => handleStatusChange(file.name, e.target.value)} 
+                            style={{ padding: '4px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px', border: '1px solid #cbd5e1' }}
+                          >
+                            <option value="APP">APP</option>
+                            <option value="RFC">RFC</option>
+                            <option value="AWC">AWC</option>
+                            <option value="RJ">RJ</option>
+                          </select>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 'bold', padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: '1px solid #bae6fd' }}>
+                            Auto Extract
+                          </span>
+                        )}
                       </div>
-                      {isNumberedMode && (
-                        <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold' }}>
-                          Mã gán: {formattedNum} CaRs
-                        </span>
-                      )}
-                    </div>
-                    
-                    {processMode !== 'pre_prepared' ? (
-                      <select 
-                        value={carStatuses[file.name] || 'APP'} 
-                        onChange={(e) => handleStatusChange(file.name, e.target.value)} 
-                        style={{ padding: '4px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px', border: '1px solid #cbd5e1' }}
-                      >
-                        <option value="APP">APP</option>
-                        <option value="RFC">RFC</option>
-                        <option value="AWC">AWC</option>
-                        <option value="RJ">RJ</option>
-                      </select>
-                    ) : (
-                      <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 'bold', padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: '1px solid #bae6fd' }}>
-                        Auto Extract
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -240,8 +271,8 @@ function App() {
             />
           </div>
 
-          <button onClick={handleExportZipFull} disabled={isExporting || carFiles.length === 0} style={{ width: '100%', backgroundColor: isExporting || carFiles.length === 0 ? '#94a3b8' : '#16a34a', color: '#fff', border: 'none', padding: '13px', borderRadius: '6px', fontWeight: 'bold', cursor: isExporting || carFiles.length === 0 ? 'not-allowed' : 'pointer', marginBottom: '15px' }}>
-            {isExporting ? `ĐANG XỬ LÝ (${progress}%)...` : 'XUẤT ZIP BỘ HỒ SƠ D OFFICE'}
+          <button onClick={handleExportZipFull} disabled={isExportDisabled} style={{ width: '100%', backgroundColor: isExportDisabled ? '#94a3b8' : '#16a34a', color: '#fff', border: 'none', padding: '13px', borderRadius: '6px', fontWeight: 'bold', cursor: isExportDisabled ? 'not-allowed' : 'pointer', marginBottom: '15px' }}>
+            {isExporting ? `ĐANG XỬ LÝ (${progress}%)...` : (processMode === 'no_car_letter' ? 'XUẤT ZIP 2 THƯ WORD' : 'XUẤT ZIP BỘ HỒ SƠ D OFFICE')}
           </button>
           
           {(isExporting || progress > 0) && (
@@ -259,10 +290,10 @@ function App() {
           {processedResults.length > 0 && (
             <div style={{ maxHeight: '330px', overflowY: 'auto' }}>
               {processedResults.map((res, idx) => (
-                <div key={idx} style={{ backgroundColor: res.status.includes('APP') ? '#f0fdf4' : '#fef2f2', border: `1px solid ${res.status.includes('APP') ? '#bbf7d0' : '#fecaca'}`, padding: '10px', borderRadius: '6px', marginBottom: '8px', fontSize: '12px' }}>
+                <div key={idx} style={{ backgroundColor: res.status.includes('APP') || res.status.includes('REVIEWED') ? '#f0fdf4' : '#fef2f2', border: `1px solid ${res.status.includes('APP') || res.status.includes('REVIEWED') ? '#bbf7d0' : '#fecaca'}`, padding: '10px', borderRadius: '6px', marginBottom: '8px', fontSize: '12px' }}>
                   <p style={{ margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><strong>Mã:</strong> {res.doc_no}</p>
-                  <p style={{ margin: '0 0 4px 0', color: '#2563eb' }}><strong>File xuất:</strong> <b>{res.assigned_car}</b></p>
-                  <p style={{ margin: 0 }}><strong>Tình trạng bóc tách:</strong> <span style={{ fontWeight: 'bold', color: res.status.includes('APP') ? '#166534' : '#991b1b' }}>{res.status}</span></p>
+                  <p style={{ margin: '0 0 4px 0', color: '#2563eb' }}><strong>File đính kèm:</strong> <b>{res.assigned_car}</b></p>
+                  <p style={{ margin: 0 }}><strong>Tình trạng:</strong> <span style={{ fontWeight: 'bold', color: res.status.includes('APP') || res.status.includes('REVIEWED') ? '#166534' : '#991b1b' }}>{res.status}</span></p>
                 </div>
               ))}
             </div>
