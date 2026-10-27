@@ -147,7 +147,7 @@ function App() {
       <header style={{ backgroundColor: '#0f172a', color: '#fff', padding: '16px 24px', borderRadius: '8px', marginBottom: '20px' }}>
         <h2 style={{ margin: 0, fontSize: '20px' }}>QT1 - PECC1 AUTOMATED CaR REVISION SYSTEM</h2>
       </header>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr 1.2fr', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr 1.15fr', gap: '20px' }}>
         
         {/* CỘT 1 */}
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -175,53 +175,100 @@ function App() {
           </div>
         </div>
 
-        {/* CỘT 2 */}
+        {/* CỘT 2: PHÂN NHÓM CHUYÊN NGHIỆP */}
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <h3 style={{ borderBottom: '2px solid #0d9488', paddingBottom: '8px', color: '#0f766e', marginTop: 0 }}>CỘT 2: CARs & TÙY CHỌN KẾT QUẢ</h3>
+          <h3 style={{ borderBottom: '2px solid #0d9488', paddingBottom: '8px', color: '#0f766e', marginTop: 0 }}>CỘT 2: QUY TRÌNH XỬ LÝ HỒ SƠ</h3>
           
-          <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-            <label style={{ display: 'block', marginBottom: '10px', fontSize: '13px', fontWeight: 'bold', color: '#0f766e' }}>CHẾ ĐỘ XỬ LÝ EXCEL CaRs:</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
-              
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: processMode === 'auto_generate_cars' ? 'bold' : 'normal', color: processMode === 'auto_generate_cars' ? '#0284c7' : '#0f172a' }}>
-                <input type="radio" name="mode" value="auto_generate_cars" checked={processMode === 'auto_generate_cars'} onChange={() => setProcessMode('auto_generate_cars')} style={{ marginRight: '8px' }} />
-                ✨ Tự tạo CaR mới từ Thư Cover (không cần nạp CaR)
+          <div style={{ marginBottom: '15px', padding: '14px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+            
+            {/* NHÓM 1: ROUND 1 */}
+            <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+              📁 Khởi tạo CaR Round 1
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px', paddingLeft: '4px' }}>
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start' }}>
+                <input type="radio" name="mode" value="auto_generate_cars" checked={processMode === 'auto_generate_cars'} onChange={() => setProcessMode('auto_generate_cars')} style={{ marginTop: '3px', marginRight: '8px' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: processMode === 'auto_generate_cars' ? 'bold' : '500', color: processMode === 'auto_generate_cars' ? '#0284c7' : '#1e293b' }}>
+                    Tự động sinh CaR từ Thư Cover
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>Chỉ cần nạp Cover ở Cột 1, hệ thống tự tạo toàn bộ CaR R1 chuẩn</div>
+                </div>
               </label>
 
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: processMode === 'number_filled_cars' ? 'bold' : 'normal', color: processMode === 'number_filled_cars' ? '#0f766e' : '#0f172a' }}>
-                <input type="radio" name="mode" value="number_filled_cars" checked={processMode === 'number_filled_cars'} onChange={() => setProcessMode('number_filled_cars')} style={{ marginRight: '8px' }} />
-                CaR mới đã có dữ liệu từ kỹ sư (chỉ cấp số)
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start' }}>
+                <input type="radio" name="mode" value="number_filled_cars" checked={processMode === 'number_filled_cars'} onChange={() => setProcessMode('number_filled_cars')} style={{ marginTop: '3px', marginRight: '8px' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: processMode === 'number_filled_cars' ? 'bold' : '500', color: processMode === 'number_filled_cars' ? '#0f766e' : '#1e293b' }}>
+                    Cấp số cho CaR đã có nhận xét
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>Kỹ sư đã điền ý kiến, hệ thống cấp số E1 và đọc trạng thái tự động</div>
+                </div>
               </label>
 
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                <input type="radio" name="mode" value="auto_bump" checked={processMode === 'auto_bump'} onChange={() => setProcessMode('auto_bump')} style={{ marginRight: '8px' }} />
-                Tự động tạo Round mới (R+1) & Cập nhật Form
-              </label>
-
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                <input type="radio" name="mode" value="pre_prepared" checked={processMode === 'pre_prepared'} onChange={() => setProcessMode('pre_prepared')} style={{ marginRight: '8px' }} />
-                Đã có sẵn CaR (Chỉ bóc tách tạo Thư Cover)
-              </label>
-
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                <input type="radio" name="mode" value="new_cars" checked={processMode === 'new_cars'} onChange={() => setProcessMode('new_cars')} style={{ marginRight: '8px' }} />
-                CaR mới (nạp file mẫu trắng)
-              </label>
-
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#64748b' }}>
-                <input type="radio" name="mode" value="no_car_letter" checked={processMode === 'no_car_letter'} onChange={() => setProcessMode('no_car_letter')} style={{ marginRight: '8px' }} />
-                Trả lời thư, không có CaR
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start' }}>
+                <input type="radio" name="mode" value="new_cars" checked={processMode === 'new_cars'} onChange={() => setProcessMode('new_cars')} style={{ marginTop: '3px', marginRight: '8px' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: processMode === 'new_cars' ? 'bold' : '500', color: processMode === 'new_cars' ? '#0d9488' : '#1e293b' }}>
+                    Điền dữ liệu vào CaR mẫu trắng
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>Nạp file mẫu trống để điền thông tin đệ trình & cấp số mới</div>
+                </div>
               </label>
             </div>
 
-            {processMode === 'auto_generate_cars' && (
-              <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#e0f2fe', borderRadius: '6px', border: '1px solid #7dd3fc', fontSize: '12px', color: '#0369a1' }}>
-                💡 <b>Tự động hóa hoàn toàn:</b> Bạn không cần nạp file CaR. Hệ thống sẽ đọc bảng danh mục trong Thư Cover ở Cột 1 và tự sinh toàn bộ file Excel CaRs Round 1 tương ứng (cấp số, xóa sạch nền vàng, khớp 100% Doc No, Rev, Title).
-              </div>
-            )}
+            <hr style={{ border: 'none', borderTop: '1px dashed #cbd5e1', margin: '10px 0' }} />
 
+            {/* NHÓM 2: CÁC ROUND TIẾP THEO */}
+            <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+              🔄 Soát xét các Round tiếp theo
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px', paddingLeft: '4px' }}>
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start' }}>
+                <input type="radio" name="mode" value="auto_bump" checked={processMode === 'auto_bump'} onChange={() => setProcessMode('auto_bump')} style={{ marginTop: '3px', marginRight: '8px' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: processMode === 'auto_bump' ? 'bold' : '500', color: processMode === 'auto_bump' ? '#7c3aed' : '#1e293b' }}>
+                    Tự động tạo Round tiếp theo (R+1)
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>Nhân bản Sheet, tăng số Round và lưu giữ toàn bộ lịch sử ý kiến</div>
+                </div>
+              </label>
+            </div>
+
+            <hr style={{ border: 'none', borderTop: '1px dashed #cbd5e1', margin: '10px 0' }} />
+
+            {/* NHÓM 3: CHỈ PHÁT HÀNH THƯ */}
+            <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+              ✉️ Phát hành Thư Cover (Không sửa CaR)
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '4px' }}>
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start' }}>
+                <input type="radio" name="mode" value="pre_prepared" checked={processMode === 'pre_prepared'} onChange={() => setProcessMode('pre_prepared')} style={{ marginTop: '3px', marginRight: '8px' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: processMode === 'pre_prepared' ? 'bold' : '500', color: processMode === 'pre_prepared' ? '#334155' : '#1e293b' }}>
+                    Trích xuất Thư từ CaR hoàn thiện
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>CaR đã đầy đủ, chỉ đọc mã tài liệu và tình trạng để xuất 2 Thư Word</div>
+                </div>
+              </label>
+
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start' }}>
+                <input type="radio" name="mode" value="no_car_letter" checked={processMode === 'no_car_letter'} onChange={() => setProcessMode('no_car_letter')} style={{ marginTop: '3px', marginRight: '8px' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: processMode === 'no_car_letter' ? 'bold' : '500', color: processMode === 'no_car_letter' ? '#334155' : '#1e293b' }}>
+                    Phúc đáp công văn thuần túy (Không kèm CaR)
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>Chỉ xuất 2 Thư Word trả lời nội dung công văn của EPC</div>
+                </div>
+              </label>
+            </div>
+
+            {/* HỘP NHẬP SỐ HIỆU CARS */}
             {(processMode === 'auto_generate_cars' || processMode === 'number_filled_cars' || processMode === 'new_cars') && (
-              <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+              <div style={{ marginTop: '14px', padding: '12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1d4ed8', marginBottom: '4px' }}>
                   Nhập số CaRs bắt đầu (Tự tăng liên tiếp):
                 </label>
@@ -236,7 +283,7 @@ function App() {
                 {processMode === 'auto_generate_cars' && (
                   <div style={{ marginTop: '8px' }}>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1d4ed8', marginBottom: '4px' }}>
-                      Tình trạng duyệt mặc định cho các CaR mới:
+                      Tình trạng duyệt mặc định cho CaR tạo mới:
                     </label>
                     <select 
                       value={defaultStatus} 
@@ -254,12 +301,13 @@ function App() {
             )}
           </div>
 
+          {/* Ô NẠP FILE (ẨN ĐI KHI CHỌN CHẾ ĐỘ TỰ SINH HOẶC CHỈ XUẤT THƯ) */}
           {processMode !== 'no_car_letter' && processMode !== 'auto_generate_cars' && (
             <>
               <input type="file" multiple accept=".xlsx,.xls" onChange={handleCarFilesChange} style={{ width: '100%', marginBottom: '15px' }} />
               
               {carFiles.length > 0 && (
-                <div style={{ maxHeight: '420px', overflowY: 'auto', marginBottom: '15px' }}>
+                <div style={{ maxHeight: '350px', overflowY: 'auto', marginBottom: '15px' }}>
                   {carFiles.map((file, idx) => {
                     const assignedNum = parseInt(startCarNo || 0) + idx;
                     const formattedNum = assignedNum < 10000 ? String(assignedNum).padStart(4, '0') : assignedNum;
