@@ -9,6 +9,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [currentProcessingFile, setCurrentProcessingFile] = useState('');
   const [processMode, setProcessMode] = useState('auto_bump');
+  const [startCarNo, setStartCarNo] = useState('9999');
   const [qtiNo, setQtiNo] = useState('QTI-PECC1-PMB2-26-10-111');
 
   const handleCoverChange = (e) => {
@@ -37,11 +38,17 @@ function App() {
 
     const totalFiles = carFiles.length;
     for (let i = 0; i < totalFiles; i++) {
-      setCurrentProcessingFile(
-        processMode === 'auto_bump' 
-          ? `Đang định dạng & nhân bản Sheet: ${carFiles[i].name}` 
-          : `Đang trích xuất tự động Status từ file: ${carFiles[i].name}`
-      );
+      let msg = `Đang định dạng & nhân bản Sheet: ${carFiles[i].name}`;
+      if (processMode === 'number_filled_cars') {
+        const assigned = parseInt(startCarNo || 0) + i;
+        msg = `Đang gán số CaR ${assigned} & bảo toàn nội dung: ${carFiles[i].name}`;
+      } else if (processMode === 'new_cars') {
+        const assigned = parseInt(startCarNo || 0) + i;
+        msg = `Đang gán số CaR ${assigned} & tạo Round 1: ${carFiles[i].name}`;
+      } else if (processMode === 'pre_prepared') {
+        msg = `Đang trích xuất tự động Status từ file: ${carFiles[i].name}`;
+      }
+      setCurrentProcessingFile(msg);
       setProgress(10 + Math.round(((i + 1) / totalFiles) * 75));
       await new Promise(resolve => setTimeout(resolve, 20));
     }
@@ -54,8 +61,9 @@ function App() {
     carFiles.forEach(file => formData.append('files', file));
     formData.append('mode', processMode);
     formData.append('qti_no', qtiNo.trim());
+    formData.append('start_car_no', startCarNo.trim());
 
-    if (processMode === 'auto_bump') {
+    if (processMode !== 'pre_prepared') {
       formData.append('metadata', JSON.stringify(carStatuses));
     } else {
       formData.append('metadata', JSON.stringify({})); 
@@ -72,7 +80,6 @@ function App() {
         throw new Error(errText);
       }
 
-      // Trích xuất danh sách kết quả từ Header an toàn
       try {
         const itemsHeader = response.headers.get('X-Processed-Items');
         if (itemsHeader) {
@@ -83,7 +90,6 @@ function App() {
         console.warn("Bỏ qua đọc header danh sách:", hErr);
       }
 
-      // Đọc trực tiếp luồng nhị phân Blob giúp điện thoại không bị quá tải bộ nhớ
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const downloadLink = document.createElement("a");
@@ -108,6 +114,8 @@ function App() {
     }
   };
 
+  const isNumberedMode = processMode === 'new_cars' || processMode === 'number_filled_cars';
+
   return (
     <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', backgroundColor: '#f1f5f9', minHeight: '100vh', padding: '20px' }}>
       <header style={{ backgroundColor: '#0f172a', color: '#fff', padding: '16px 24px', borderRadius: '8px', marginBottom: '20px' }}>
@@ -131,44 +139,84 @@ function App() {
           
           <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 'bold', color: '#0f766e' }}>CHẾ ĐỘ XỬ LÝ EXCEL CaRs:</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
               <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                 <input type="radio" name="mode" value="auto_bump" checked={processMode === 'auto_bump'} onChange={() => setProcessMode('auto_bump')} style={{ marginRight: '8px' }} />
-                Tự động tạo Round mới (R+1) & Cập nhật Form
+                🔄 Tự động tạo Round mới (R+1) & Cập nhật Form
+              </label>
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <input type="radio" name="mode" value="number_filled_cars" checked={processMode === 'number_filled_cars'} onChange={() => setProcessMode('number_filled_cars')} style={{ marginRight: '8px' }} />
+                ✍️ CaRs đã điền nội dung (Chỉ cấp số & giữ nguyên ý kiến)
+              </label>
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <input type="radio" name="mode" value="new_cars" checked={processMode === 'new_cars'} onChange={() => setProcessMode('new_cars')} style={{ marginRight: '8px' }} />
+                🆕 Tạo CaRs mới từ mẫu trắng (Bắt đầu từ Round 1)
               </label>
               <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                 <input type="radio" name="mode" value="pre_prepared" checked={processMode === 'pre_prepared'} onChange={() => setProcessMode('pre_prepared')} style={{ marginRight: '8px' }} />
-                Đã có sẵn CaR (Bảo toàn 100% hình ảnh 150MB)
+                📁 Đã có sẵn CaR đầy đủ số (Bảo toàn 100% hình ảnh 150MB)
               </label>
             </div>
+
+            {/* Ô nhập số bắt đầu khi cần cấp số mới */}
+            {isNumberedMode && (
+              <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1d4ed8', marginBottom: '4px' }}>
+                  🔢 Nhập số CaRs bắt đầu (Tự tăng liên tiếp):
+                </label>
+                <input 
+                  type="number" 
+                  value={startCarNo} 
+                  onChange={(e) => setStartCarNo(e.target.value)} 
+                  placeholder="Ví dụ: 9999"
+                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 'bold', boxSizing: 'border-box' }}
+                />
+                <span style={{ fontSize: '11px', color: '#2563eb', display: 'block', marginTop: '4px' }}>
+                  * Các tài liệu sẽ được gán số: {startCarNo || '9999'}, {parseInt(startCarNo || 0) + 1}, {parseInt(startCarNo || 0) + 2},...
+                </span>
+              </div>
+            )}
           </div>
 
           <input type="file" multiple accept=".xlsx,.xls" onChange={handleCarFilesChange} style={{ width: '100%', marginBottom: '15px' }} />
           
           {carFiles.length > 0 && (
             <div style={{ maxHeight: '420px', overflowY: 'auto', marginBottom: '15px' }}>
-              {carFiles.map((file, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '8px', marginBottom: '6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: '12px', width: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>{file.name}</span>
-                  
-                  {processMode === 'auto_bump' ? (
-                    <select 
-                      value={carStatuses[file.name] || 'APP'} 
-                      onChange={(e) => handleStatusChange(file.name, e.target.value)} 
-                      style={{ padding: '4px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px', border: '1px solid #cbd5e1' }}
-                    >
-                      <option value="APP">APP</option>
-                      <option value="RFC">RFC</option>
-                      <option value="AWC">AWC</option>
-                      <option value="RJ">RJ</option>
-                    </select>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 'bold', padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: '1px solid #bae6fd' }}>
-                      Auto Extract
-                    </span>
-                  )}
-                </div>
-              ))}
+              {carFiles.map((file, idx) => {
+                const assignedNum = parseInt(startCarNo || 0) + idx;
+                const formattedNum = assignedNum < 10000 ? String(assignedNum).padStart(4, '0') : assignedNum;
+                return (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '8px', marginBottom: '6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ width: '65%', overflow: 'hidden' }}>
+                      <div style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
+                        {file.name}
+                      </div>
+                      {isNumberedMode && (
+                        <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold' }}>
+                          🏷️ {formattedNum} CaRs
+                        </span>
+                      )}
+                    </div>
+                    
+                    {processMode !== 'pre_prepared' ? (
+                      <select 
+                        value={carStatuses[file.name] || 'APP'} 
+                        onChange={(e) => handleStatusChange(file.name, e.target.value)} 
+                        style={{ padding: '4px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px', border: '1px solid #cbd5e1' }}
+                      >
+                        <option value="APP">APP</option>
+                        <option value="RFC">RFC</option>
+                        <option value="AWC">AWC</option>
+                        <option value="RJ">RJ</option>
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 'bold', padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: '1px solid #bae6fd' }}>
+                        Auto Extract
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
