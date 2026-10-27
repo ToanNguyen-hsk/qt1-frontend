@@ -5,13 +5,14 @@ function App() {
   const [customDate, setCustomDate] = useState('');
   const [carFiles, setCarFiles] = useState([]);
   const [carStatuses, setCarStatuses] = useState({});
+  const [defaultStatus, setDefaultStatus] = useState('APP');
   const [processedResults, setProcessedResults] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentProcessingFile, setCurrentProcessingFile] = useState('');
-  const [processMode, setProcessMode] = useState('number_filled_cars');
-  const [startCarNo, setStartCarNo] = useState('9904');
-  const [qtiNo, setQtiNo] = useState('QTI-PECC1-PMB2-26-10-143');
+  const [processMode, setProcessMode] = useState('auto_generate_cars');
+  const [startCarNo, setStartCarNo] = useState('9905');
+  const [qtiNo, setQtiNo] = useState('QTI-PECC1-PMB2-26-10-147');
 
   const handleCoverChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -32,17 +33,26 @@ function App() {
   };
 
   const handleExportZipFull = async () => {
-    if (processMode === 'no_car_letter') {
+    if (processMode === 'no_car_letter' || processMode === 'auto_generate_cars') {
       if (!coverFile) return alert("Vui lòng nạp Thư Cover ở Cột 1 trước!");
     } else {
       if (carFiles.length === 0) return alert("Vui lòng nạp danh sách file CaRs ở Cột 2 trước!");
     }
 
     setIsExporting(true);
-    setProgress(10);
+    setProgress(15);
     setCurrentProcessingFile('Đang bóc tách danh mục tài liệu & Ngày đệ trình từ Thư Cover EPC...');
 
-    if (processMode === 'no_car_letter') {
+    if (processMode === 'auto_generate_cars') {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setProgress(40);
+      setCurrentProcessingFile(`Đang tự động khởi tạo các file CaRs mới từ số ${startCarNo}...`);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setProgress(75);
+      setCurrentProcessingFile('Đang đồng bộ Tờ trình tiếng Việt & Thư tiếng Anh...');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setProgress(90);
+    } else if (processMode === 'no_car_letter') {
       await new Promise(resolve => setTimeout(resolve, 300));
       setProgress(50);
       setCurrentProcessingFile('Đang sinh Tờ trình TV và Thư tiếng Anh...');
@@ -58,26 +68,24 @@ function App() {
         } else if (processMode === 'new_cars') {
           const assigned = parseInt(startCarNo || 0) + i;
           msg = `Đang gán số CaR ${assigned} & tạo Round 1: ${carFiles[i].name}`;
-        } else if (processMode === 'pre_prepared') {
-          msg = `Đang trích xuất tự động Status từ file: ${carFiles[i].name}`;
         }
         setCurrentProcessingFile(msg);
-        setProgress(10 + Math.round(((i + 1) / totalFiles) * 75));
+        setProgress(15 + Math.round(((i + 1) / totalFiles) * 70));
         await new Promise(resolve => setTimeout(resolve, 30));
       }
-      setCurrentProcessingFile('Đang đồng bộ Thư Word gốc & Đóng gói ZIP trực tiếp...');
       setProgress(90);
     }
 
     const formData = new FormData();
     if (coverFile) formData.append('cover_file', coverFile);
-    if (processMode !== 'no_car_letter') {
+    if (processMode !== 'no_car_letter' && processMode !== 'auto_generate_cars') {
       carFiles.forEach(file => formData.append('files', file));
     }
     formData.append('mode', processMode);
     formData.append('qti_no', qtiNo.trim());
     formData.append('start_car_no', startCarNo.trim());
     formData.append('custom_date', customDate.trim());
+    formData.append('default_status', defaultStatus);
 
     if (processMode === 'auto_bump' || processMode === 'new_cars') {
       formData.append('metadata', JSON.stringify(carStatuses));
@@ -120,7 +128,7 @@ function App() {
       setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1000);
       
       setProgress(100);
-      setCurrentProcessingFile(processMode === 'no_car_letter' ? 'Đã xuất 2 file Thư Word thành công!' : 'Đã xuất trọn bộ hồ sơ thành công!');
+      setCurrentProcessingFile('Đã xuất trọn bộ hồ sơ thành công!');
     } catch (err) {
       alert("LỖI HỆ THỐNG: " + err.message);
       setProgress(0);
@@ -130,8 +138,9 @@ function App() {
     }
   };
 
-  const isNumberedMode = processMode === 'new_cars' || processMode === 'number_filled_cars';
-  const isExportDisabled = isExporting || (processMode === 'no_car_letter' ? !coverFile : carFiles.length === 0);
+  const isExportDisabled = isExporting || (
+    (processMode === 'no_car_letter' || processMode === 'auto_generate_cars') ? !coverFile : carFiles.length === 0
+  );
 
   return (
     <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', backgroundColor: '#f1f5f9', minHeight: '100vh', padding: '20px' }}>
@@ -157,7 +166,7 @@ function App() {
               type="text" 
               value={customDate} 
               onChange={(e) => setCustomDate(e.target.value)} 
-              placeholder="Để trống để tự bóc tách (hoặc gõ đè nếu cần)"
+              placeholder="Để trống để tự bóc tách từ Cover"
               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '12px', boxSizing: 'border-box' }}
             />
             <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginTop: '4px' }}>
@@ -173,6 +182,17 @@ function App() {
           <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
             <label style={{ display: 'block', marginBottom: '10px', fontSize: '13px', fontWeight: 'bold', color: '#0f766e' }}>CHẾ ĐỘ XỬ LÝ EXCEL CaRs:</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
+              
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: processMode === 'auto_generate_cars' ? 'bold' : 'normal', color: processMode === 'auto_generate_cars' ? '#0284c7' : '#0f172a' }}>
+                <input type="radio" name="mode" value="auto_generate_cars" checked={processMode === 'auto_generate_cars'} onChange={() => setProcessMode('auto_generate_cars')} style={{ marginRight: '8px' }} />
+                ✨ Tự tạo CaR mới từ Thư Cover (không cần nạp CaR)
+              </label>
+
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: processMode === 'number_filled_cars' ? 'bold' : 'normal', color: processMode === 'number_filled_cars' ? '#0f766e' : '#0f172a' }}>
+                <input type="radio" name="mode" value="number_filled_cars" checked={processMode === 'number_filled_cars'} onChange={() => setProcessMode('number_filled_cars')} style={{ marginRight: '8px' }} />
+                CaR mới đã có dữ liệu từ kỹ sư (chỉ cấp số)
+              </label>
+
               <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                 <input type="radio" name="mode" value="auto_bump" checked={processMode === 'auto_bump'} onChange={() => setProcessMode('auto_bump')} style={{ marginRight: '8px' }} />
                 Tự động tạo Round mới (R+1) & Cập nhật Form
@@ -183,29 +203,24 @@ function App() {
                 Đã có sẵn CaR (Chỉ bóc tách tạo Thư Cover)
               </label>
 
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: processMode === 'number_filled_cars' ? 'bold' : 'normal', color: processMode === 'number_filled_cars' ? '#0f766e' : '#0f172a' }}>
-                <input type="radio" name="mode" value="number_filled_cars" checked={processMode === 'number_filled_cars'} onChange={() => setProcessMode('number_filled_cars')} style={{ marginRight: '8px' }} />
-                CaR mới đã có dữ liệu từ kỹ sư (chỉ cấp số)
-              </label>
-
               <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                 <input type="radio" name="mode" value="new_cars" checked={processMode === 'new_cars'} onChange={() => setProcessMode('new_cars')} style={{ marginRight: '8px' }} />
-                CaR mới (cấp số)
+                CaR mới (nạp file mẫu trắng)
               </label>
 
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#0284c7', fontWeight: processMode === 'no_car_letter' ? 'bold' : 'normal' }}>
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#64748b' }}>
                 <input type="radio" name="mode" value="no_car_letter" checked={processMode === 'no_car_letter'} onChange={() => setProcessMode('no_car_letter')} style={{ marginRight: '8px' }} />
                 Trả lời thư, không có CaR
               </label>
             </div>
 
-            {processMode === 'number_filled_cars' && (
-              <div style={{ marginTop: '10px', padding: '8px 10px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0', fontSize: '12px', color: '#166534' }}>
-                ✓ Hệ thống sẽ <b>tự động đọc tình trạng (Status)</b> kỹ sư đã chọn trong file CaRs và đưa vào Thư Cover tương ứng.
+            {processMode === 'auto_generate_cars' && (
+              <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#e0f2fe', borderRadius: '6px', border: '1px solid #7dd3fc', fontSize: '12px', color: '#0369a1' }}>
+                💡 <b>Tự động hóa hoàn toàn:</b> Bạn không cần nạp file CaR. Hệ thống sẽ đọc bảng danh mục trong Thư Cover ở Cột 1 và tự sinh toàn bộ file Excel CaRs Round 1 tương ứng (cấp số, xóa sạch nền vàng, khớp 100% Doc No, Rev, Title).
               </div>
             )}
 
-            {isNumberedMode && (
+            {(processMode === 'auto_generate_cars' || processMode === 'number_filled_cars' || processMode === 'new_cars') && (
               <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1d4ed8', marginBottom: '4px' }}>
                   Nhập số CaRs bắt đầu (Tự tăng liên tiếp):
@@ -214,14 +229,32 @@ function App() {
                   type="number" 
                   value={startCarNo} 
                   onChange={(e) => setStartCarNo(e.target.value)} 
-                  placeholder="Ví dụ: 9904"
+                  placeholder="Ví dụ: 9905"
                   style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 'bold', boxSizing: 'border-box' }}
                 />
+
+                {processMode === 'auto_generate_cars' && (
+                  <div style={{ marginTop: '8px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1d4ed8', marginBottom: '4px' }}>
+                      Tình trạng duyệt mặc định cho các CaR mới:
+                    </label>
+                    <select 
+                      value={defaultStatus} 
+                      onChange={(e) => setDefaultStatus(e.target.value)} 
+                      style={{ width: '100%', padding: '7px', borderRadius: '4px', border: '1px solid #93c5fd', fontWeight: 'bold', fontSize: '12px' }}
+                    >
+                      <option value="APP">APPROVED (APP)</option>
+                      <option value="RFC">RETURN FOR CORRECTIONS (RFC)</option>
+                      <option value="AWC">APPROVED WITH COMMENTS (AWC)</option>
+                      <option value="RJ">REJECTED (RJ)</option>
+                    </select>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {processMode !== 'no_car_letter' && (
+          {processMode !== 'no_car_letter' && processMode !== 'auto_generate_cars' && (
             <>
               <input type="file" multiple accept=".xlsx,.xls" onChange={handleCarFilesChange} style={{ width: '100%', marginBottom: '15px' }} />
               
@@ -232,15 +265,13 @@ function App() {
                     const formattedNum = assignedNum < 10000 ? String(assignedNum).padStart(4, '0') : assignedNum;
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '8px', marginBottom: '6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                        <div style={{ width: processMode === 'number_filled_cars' || processMode === 'pre_prepared' ? '70%' : '65%', overflow: 'hidden' }}>
+                        <div style={{ width: '70%', overflow: 'hidden' }}>
                           <div style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
                             {file.name}
                           </div>
-                          {isNumberedMode && (
-                            <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold' }}>
-                              Mã gán: {formattedNum} CaRs
-                            </span>
-                          )}
+                          <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 'bold' }}>
+                            Mã gán: {formattedNum} CaRs
+                          </span>
                         </div>
                         
                         {processMode === 'auto_bump' || processMode === 'new_cars' ? (
