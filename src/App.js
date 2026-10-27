@@ -2,15 +2,16 @@ import React, { useState } from 'react';
 
 function App() {
   const [coverFile, setCoverFile] = useState(null);
+  const [customDate, setCustomDate] = useState('');
   const [carFiles, setCarFiles] = useState([]);
   const [carStatuses, setCarStatuses] = useState({});
   const [processedResults, setProcessedResults] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentProcessingFile, setCurrentProcessingFile] = useState('');
-  const [processMode, setProcessMode] = useState('auto_bump');
-  const [startCarNo, setStartCarNo] = useState('9999');
-  const [qtiNo, setQtiNo] = useState('QTI-PECC1-PMB2-26-10-111');
+  const [processMode, setProcessMode] = useState('number_filled_cars');
+  const [startCarNo, setStartCarNo] = useState('9904');
+  const [qtiNo, setQtiNo] = useState('QTI-PECC1-PMB2-26-10-143');
 
   const handleCoverChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -44,16 +45,16 @@ function App() {
     if (processMode === 'no_car_letter') {
       await new Promise(resolve => setTimeout(resolve, 300));
       setProgress(50);
-      setCurrentProcessingFile('Đang đồng bộ Header/Footer & sinh Tờ trình TV và Thư tiếng Anh...');
+      setCurrentProcessingFile('Đang sinh Tờ trình TV và Thư tiếng Anh...');
       await new Promise(resolve => setTimeout(resolve, 300));
       setProgress(85);
     } else {
       const totalFiles = carFiles.length;
       for (let i = 0; i < totalFiles; i++) {
-        let msg = `Đang định dạng & nhân bản Sheet: ${carFiles[i].name}`;
+        let msg = `Đang xử lý: ${carFiles[i].name}`;
         if (processMode === 'number_filled_cars') {
           const assigned = parseInt(startCarNo || 0) + i;
-          msg = `Đang gán số CaR ${assigned} & bảo toàn nội dung: ${carFiles[i].name}`;
+          msg = `Đang đọc tình trạng từ CaR & gán số ${assigned}: ${carFiles[i].name}`;
         } else if (processMode === 'new_cars') {
           const assigned = parseInt(startCarNo || 0) + i;
           msg = `Đang gán số CaR ${assigned} & tạo Round 1: ${carFiles[i].name}`;
@@ -62,9 +63,9 @@ function App() {
         }
         setCurrentProcessingFile(msg);
         setProgress(10 + Math.round(((i + 1) / totalFiles) * 75));
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise(resolve => setTimeout(resolve, 30));
       }
-      setCurrentProcessingFile('Đang điền dữ liệu Form Word gốc & Đóng gói ZIP trực tiếp...');
+      setCurrentProcessingFile('Đang đồng bộ Thư Word gốc & Đóng gói ZIP trực tiếp...');
       setProgress(90);
     }
 
@@ -76,8 +77,10 @@ function App() {
     formData.append('mode', processMode);
     formData.append('qti_no', qtiNo.trim());
     formData.append('start_car_no', startCarNo.trim());
+    formData.append('custom_date', customDate.trim());
 
-    if (processMode !== 'pre_prepared' && processMode !== 'no_car_letter') {
+    // Chỉ gửi carStatuses khi ở chế độ auto_bump hoặc new_cars
+    if (processMode === 'auto_bump' || processMode === 'new_cars') {
       formData.append('metadata', JSON.stringify(carStatuses));
     } else {
       formData.append('metadata', JSON.stringify({})); 
@@ -146,9 +149,25 @@ function App() {
           {coverFile && (
             <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', padding: '8px', borderRadius: '4px', fontSize: '12px', color: '#166534' }}>Đã nạp: <b>{coverFile.name}</b></div>
           )}
+
+          <div style={{ marginTop: '14px', padding: '10px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#0369a1', marginBottom: '4px' }}>
+              Ngày công văn EPC (Tùy chọn):
+            </label>
+            <input 
+              type="text" 
+              value={customDate} 
+              onChange={(e) => setCustomDate(e.target.value)} 
+              placeholder="Để trống để tự bóc tách (hoặc gõ đè nếu cần)"
+              style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '12px', boxSizing: 'border-box' }}
+            />
+            <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginTop: '4px' }}>
+              * Mặc định hệ thống tự đọc chính xác ngày từ file Cover.
+            </span>
+          </div>
         </div>
 
-        {/* CỘT 2: 5 MỤC LỰA CHỌN */}
+        {/* CỘT 2 */}
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
           <h3 style={{ borderBottom: '2px solid #0d9488', paddingBottom: '8px', color: '#0f766e', marginTop: 0 }}>CỘT 2: CARs & TÙY CHỌN KẾT QUẢ</h3>
           
@@ -165,7 +184,7 @@ function App() {
                 Đã có sẵn CaR (Chỉ bóc tách tạo Thư Cover)
               </label>
 
-              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: processMode === 'number_filled_cars' ? 'bold' : 'normal', color: processMode === 'number_filled_cars' ? '#0f766e' : '#0f172a' }}>
                 <input type="radio" name="mode" value="number_filled_cars" checked={processMode === 'number_filled_cars'} onChange={() => setProcessMode('number_filled_cars')} style={{ marginRight: '8px' }} />
                 CaR mới đã có dữ liệu từ kỹ sư (chỉ cấp số)
               </label>
@@ -181,14 +200,12 @@ function App() {
               </label>
             </div>
 
-            {/* Thông báo cho chế độ Trả lời thư không có CaR */}
-            {processMode === 'no_car_letter' && (
-              <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#e0f2fe', borderRadius: '6px', border: '1px solid #7dd3fc', fontSize: '12px', color: '#0369a1' }}>
-                💡 <b>Ghi chú:</b> Chế độ này không cần nạp file CaR. Hệ thống sẽ bóc tách thông tin từ Thư Cover ở Cột 1 để tạo ngay <b>2 file Word</b> (Tờ trình Tiếng Việt & Thư Tiếng Anh).
+            {processMode === 'number_filled_cars' && (
+              <div style={{ marginTop: '10px', padding: '8px 10px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0', fontSize: '12px', color: '#166534' }}>
+                ✓ Hệ thống sẽ <b>tự động đọc tình trạng (Status)</b> kỹ sư đã chọn trong file CaRs và đưa vào Thư Cover tương ứng.
               </div>
             )}
 
-            {/* Ô nhập số khi chọn chế độ cấp số */}
             {isNumberedMode && (
               <div style={{ marginTop: '12px', padding: '10px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#1d4ed8', marginBottom: '4px' }}>
@@ -198,12 +215,9 @@ function App() {
                   type="number" 
                   value={startCarNo} 
                   onChange={(e) => setStartCarNo(e.target.value)} 
-                  placeholder="Ví dụ: 9999"
+                  placeholder="Ví dụ: 9904"
                   style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #93c5fd', fontSize: '13px', fontWeight: 'bold', boxSizing: 'border-box' }}
                 />
-                <span style={{ fontSize: '11px', color: '#2563eb', display: 'block', marginTop: '4px' }}>
-                  * Các tài liệu sẽ được gán số: {startCarNo || '9999'}, {parseInt(startCarNo || 0) + 1}, {parseInt(startCarNo || 0) + 2},...
-                </span>
               </div>
             )}
           </div>
@@ -219,7 +233,7 @@ function App() {
                     const formattedNum = assignedNum < 10000 ? String(assignedNum).padStart(4, '0') : assignedNum;
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '8px', marginBottom: '6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
-                        <div style={{ width: '65%', overflow: 'hidden' }}>
+                        <div style={{ width: processMode === 'number_filled_cars' || processMode === 'pre_prepared' ? '70%' : '65%', overflow: 'hidden' }}>
                           <div style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
                             {file.name}
                           </div>
@@ -230,7 +244,8 @@ function App() {
                           )}
                         </div>
                         
-                        {processMode !== 'pre_prepared' ? (
+                        {/* Chỉ hiện dropdown khi ở chế độ auto_bump hoặc new_cars */}
+                        {processMode === 'auto_bump' || processMode === 'new_cars' ? (
                           <select 
                             value={carStatuses[file.name] || 'APP'} 
                             onChange={(e) => handleStatusChange(file.name, e.target.value)} 
@@ -242,8 +257,8 @@ function App() {
                             <option value="RJ">RJ</option>
                           </select>
                         ) : (
-                          <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: 'bold', padding: '4px 8px', backgroundColor: '#e0f2fe', borderRadius: '4px', border: '1px solid #bae6fd' }}>
-                            Auto Extract
+                          <span style={{ fontSize: '11px', color: '#0f766e', fontWeight: 'bold', padding: '4px 8px', backgroundColor: '#ccfbf1', borderRadius: '4px', border: '1px solid #99f6e4' }}>
+                            Tự đọc từ CaR
                           </span>
                         )}
                       </div>
@@ -292,8 +307,8 @@ function App() {
               {processedResults.map((res, idx) => (
                 <div key={idx} style={{ backgroundColor: res.status.includes('APP') || res.status.includes('REVIEWED') ? '#f0fdf4' : '#fef2f2', border: `1px solid ${res.status.includes('APP') || res.status.includes('REVIEWED') ? '#bbf7d0' : '#fecaca'}`, padding: '10px', borderRadius: '6px', marginBottom: '8px', fontSize: '12px' }}>
                   <p style={{ margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><strong>Mã:</strong> {res.doc_no}</p>
-                  <p style={{ margin: '0 0 4px 0', color: '#2563eb' }}><strong>File đính kèm:</strong> <b>{res.assigned_car}</b></p>
-                  <p style={{ margin: 0 }}><strong>Tình trạng:</strong> <span style={{ fontWeight: 'bold', color: res.status.includes('APP') || res.status.includes('REVIEWED') ? '#166534' : '#991b1b' }}>{res.status}</span></p>
+                  <p style={{ margin: '0 0 4px 0', color: '#2563eb' }}><strong>File xuất:</strong> <b>{res.assigned_car}</b></p>
+                  <p style={{ margin: 0 }}><strong>Tình trạng:</strong> <span style={{ fontWeight: 'bold', color: res.status.includes('APP') ? '#166534' : '#991b1b' }}>{res.status}</span></p>
                 </div>
               ))}
             </div>
