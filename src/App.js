@@ -79,7 +79,6 @@ function App() {
     formData.append('start_car_no', startCarNo.trim());
     formData.append('custom_date', customDate.trim());
 
-    // Chỉ gửi carStatuses khi ở chế độ auto_bump hoặc new_cars
     if (processMode === 'auto_bump' || processMode === 'new_cars') {
       formData.append('metadata', JSON.stringify(carStatuses));
     } else {
@@ -244,7 +243,6 @@ function App() {
                           )}
                         </div>
                         
-                        {/* Chỉ hiện dropdown khi ở chế độ auto_bump hoặc new_cars */}
                         {processMode === 'auto_bump' || processMode === 'new_cars' ? (
                           <select 
                             value={carStatuses[file.name] || 'APP'} 
