@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 function App() {
   const [coverFile, setCoverFile] = useState(null);
@@ -8,11 +8,14 @@ function App() {
   const [defaultStatus, setDefaultStatus] = useState('APP');
   const [processedResults, setProcessedResults] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [currentProcessingFile, setCurrentProcessingFile] = useState('');
-  const [processMode, setProcessMode] = useState('auto_generate_cars');
+  const [processMode, setProcessMode] = useState('auto_bump');
   const [startCarNo, setStartCarNo] = useState('9905');
-  const [qtiNo, setQtiNo] = useState('QTI-PECC1-PMB2-26-10-147');
+  const [qtiNo, setQtiNo] = useState('QTI-PECC1-PMB2-26-10-155');
+
+  const abortControllerRef = useRef(null);
+  const timerRef = useRef(null);
 
   const handleCoverChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -32,51 +35,39 @@ function App() {
     setCarStatuses(prev => ({ ...prev, [fileName]: status }));
   };
 
+  const setAllStatuses = (status) => {
+    const updated = {};
+    carFiles.forEach(f => { updated[f.name] = status; });
+    setCarStatuses(updated);
+  };
+
+  const handleCancelExport = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    setIsExporting(false);
+    setCurrentProcessingFile('');
+    setElapsedSeconds(0);
+  };
+
   const handleExportZipFull = async () => {
     const isNoCarMode = processMode === 'no_car_letter' || processMode === 'auto_generate_cars';
     if (isNoCarMode) {
-      if (!coverFile) return alert("Kính mời tải lên Thư Cover ở Bước 1 trước khi xuất dữ liệu.");
+      if (!coverFile) return alert("Kính mời tải lên Thư Cover ở Bước 1 trước khi thực hiện.");
     } else {
-      if (carFiles.length === 0) return alert("Kính mời chọn danh sách tệp CaR ở Bước 2 trước khi xuất dữ liệu.");
+      if (carFiles.length === 0) return alert("Kính mời chọn danh sách tệp CaR từ máy tính trước khi thực hiện.");
     }
 
     setIsExporting(true);
-    setProgress(15);
-    setCurrentProcessingFile('Hệ thống đang trích xuất danh mục tài liệu và ngày phát hành từ Thư Cover...');
+    setElapsedSeconds(0);
+    setCurrentProcessingFile('Hệ thống đang tải tệp và gửi yêu cầu tới máy chủ xử lý...');
 
-    if (processMode === 'auto_generate_cars') {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setProgress(45);
-      setCurrentProcessingFile(`Đang tự động khởi tạo các tệp CaR mới từ số ${startCarNo}...`);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setProgress(75);
-      setCurrentProcessingFile('Đang đồng bộ nội dung Tờ trình tiếng Việt và Thư tiếng Anh...');
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setProgress(90);
-    } else if (processMode === 'no_car_letter') {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setProgress(50);
-      setCurrentProcessingFile('Đang khởi tạo Tờ trình tiếng Việt và Thư tiếng Anh...');
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setProgress(85);
-    } else {
-      const totalFiles = carFiles.length;
-      for (let i = 0; i < totalFiles; i++) {
-        let msg = `Đang xử lý tệp: ${carFiles[i].name}`;
-        if (processMode === 'number_filled_cars') {
-          const assigned = parseInt(startCarNo || 0) + i;
-          msg = `Đang nhận diện ý kiến và cấp số ${assigned}: ${carFiles[i].name}`;
-        } else if (processMode === 'pre_prepared') {
-          msg = `Đang trích xuất dữ liệu từ tệp hoàn thiện: ${carFiles[i].name}`;
-        } else if (processMode === 'auto_bump') {
-          msg = `Đang nhân bản và tạo Round soát xét mới: ${carFiles[i].name}`;
-        }
-        setCurrentProcessingFile(msg);
-        setProgress(15 + Math.round(((i + 1) / totalFiles) * 70));
-        await new Promise(resolve => setTimeout(resolve, 30));
-      }
-      setProgress(90);
-    }
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
 
     const formData = new FormData();
     if (coverFile) formData.append('cover_file', coverFile);
@@ -95,16 +86,28 @@ function App() {
       formData.append('metadata', JSON.stringify({})); 
     }
 
+    abortControllerRef.current = new AbortController();
+    const timeoutId = setTimeout(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    }, 90000);
+
     try {
       const response = await fetch('https://toannguyen-autooffice.onrender.com/api/export-zip-full', {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal: abortControllerRef.current.signal
       });
+
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(errText);
       }
+
+      setCurrentProcessingFile('Đang nhận và lưu trữ tệp kết quả...');
 
       try {
         const itemsHeader = response.headers.get('X-Processed-Items');
@@ -113,7 +116,7 @@ function App() {
           setProcessedResults(JSON.parse(jsonStr));
         }
       } catch (hErr) {
-        console.warn("Bỏ qua thông tin danh sách tệp đính kèm:", hErr);
+        console.warn("Bỏ qua đọc danh mục tệp đính kèm:", hErr);
       }
 
       const blob = await response.blob();
@@ -128,14 +131,17 @@ function App() {
       downloadLink.remove();
       
       setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1000);
-      
-      setProgress(100);
-      setCurrentProcessingFile('Đã hoàn tất xử lý và xuất bộ hồ sơ thành công.');
+      setCurrentProcessingFile('Đã hoàn tất xử lý và tải bộ hồ sơ về máy tính.');
     } catch (err) {
-      alert("Thông báo từ hệ thống: " + err.message);
-      setProgress(0);
+      if (err.name === 'AbortError') {
+        alert("Thông báo: Quá trình gửi tệp đã vượt quá thời gian cho phép (90 giây) hoặc đã được chủ động dừng lại.");
+      } else {
+        alert("Thông báo từ hệ thống: " + err.message);
+      }
       setCurrentProcessingFile('');
     } finally {
+      clearTimeout(timeoutId);
+      if (timerRef.current) clearInterval(timerRef.current);
       setIsExporting(false);
     }
   };
@@ -146,407 +152,209 @@ function App() {
 
   return (
     <div style={{
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-      backgroundColor: '#f8fafc',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+      backgroundColor: '#f1f5f9',
       minHeight: '100vh',
-      color: '#1e293b'
+      color: '#0f172a'
     }}>
-      {/* Header thanh lịch */}
+      {/* Header hệ thống */}
       <header style={{
         backgroundColor: '#0f172a',
-        borderBottom: '1px solid #1e293b',
-        padding: '16px 32px',
+        padding: '16px 36px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        boxShadow: '0 4px 12px rgba(15, 23, 42, 0.08)'
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{
             backgroundColor: '#0284c7',
             color: '#ffffff',
             fontWeight: '800',
-            fontSize: '15px',
-            padding: '6px 12px',
-            borderRadius: '8px',
-            letterSpacing: '1px'
-          }}>
-            PECC1
-          </div>
+            fontSize: '14px',
+            padding: '5px 12px',
+            borderRadius: '6px'
+          }}>PECC1</div>
           <div>
-            <h1 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#ffffff', letterSpacing: '-0.3px' }}>
+            <h1 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#ffffff' }}>
               HỆ THỐNG QUẢN LÝ VÀ XỬ LÝ HỒ SƠ CÔNG VĂN - DỰ ÁN QUẢNG TRẠCH 1
             </h1>
             <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#94a3b8' }}>
-              Tự động hóa bóc tách Transmittal, lập phiếu CaR và phát hành thư phê duyệt
+              Bóc tách Transmittal, tạo phiếu CaR và phát hành hồ sơ phê duyệt
             </p>
           </div>
         </div>
-        <div style={{
-          fontSize: '12px',
-          fontWeight: '500',
-          color: '#cbd5e1',
-          backgroundColor: 'rgba(255, 255, 255, 0.06)',
-          padding: '6px 14px',
-          borderRadius: '20px',
-          border: '1px solid rgba(255, 255, 255, 0.1)'
-        }}>
+        <div style={{ fontSize: '12px', color: '#cbd5e1', backgroundColor: '#1e293b', padding: '6px 14px', borderRadius: '20px' }}>
           Dự án QT1 • Phiên bản 2026
         </div>
       </header>
 
-      {/* Vùng làm việc chính 3 cột */}
+      {/* Vùng làm việc chính dạng 2 bảng thông thoáng */}
       <main style={{
-        maxWidth: '1600px',
-        margin: '24px auto',
+        maxWidth: '1650px',
+        margin: '20px auto',
         padding: '0 24px',
         display: 'grid',
-        gridTemplateColumns: '1fr 1.35fr 1.15fr',
+        gridTemplateColumns: '400px 1fr',
         gap: '24px',
         alignItems: 'start'
       }}>
         
-        {/* CỘT 1 */}
-        <section style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          padding: '24px',
-          boxShadow: '0 4px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02)',
-          border: '1px solid #e2e8f0'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <span style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: '50%',
-              backgroundColor: '#e0f2fe',
-              color: '#0369a1',
-              fontWeight: '700',
-              fontSize: '13px'
-            }}>1</span>
-            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>
-              Thư Cover EPC Đệ trình
-            </h2>
-          </div>
-
-          <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.5', marginTop: 0, marginBottom: '14px' }}>
-            Kính mời tải lên Thư Cover từ Nhà thầu EPC ở định dạng tệp <b>.pdf</b> hoặc <b>.xlsx</b>:
-          </p>
-
-          <label style={{
-            display: 'block',
-            border: '2px dashed #cbd5e1',
-            borderRadius: '10px',
-            padding: '22px 16px',
-            textAlign: 'center',
-            backgroundColor: '#f8fafc',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            marginBottom: '14px'
-          }}>
-            <input type="file" accept=".pdf,.xlsx,.xls" onChange={handleCoverChange} style={{ display: 'none' }} />
-            <div style={{ fontSize: '26px', marginBottom: '6px' }}>📄</div>
-            <div style={{ fontSize: '13px', fontWeight: '600', color: '#0284c7' }}>
-              Bấm để chọn tệp Thư Cover
-            </div>
-            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-              Hỗ trợ tệp PDF hoặc bảng tính Excel
-            </div>
-          </label>
-
-          {coverFile && (
-            <div style={{
-              backgroundColor: '#f0fdf4',
-              border: '1px solid #bbf7d0',
-              padding: '10px 14px',
-              borderRadius: '8px',
-              fontSize: '12px',
-              color: '#166534',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '14px'
-            }}>
-              <span>✓</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                Đã tiếp nhận: <b>{coverFile.name}</b>
-              </span>
-            </div>
-          )}
-
+        {/* BẢNG TRÁI: THIẾT LẬP QUY TRÌNH & THƯ COVER */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* Card 1: Thư Cover */}
           <div style={{
-            backgroundColor: '#f8fafc',
-            borderRadius: '10px',
-            padding: '14px',
-            border: '1px solid #e2e8f0'
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '18px',
+            border: '1px solid #cbd5e1',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
           }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              Ngày phát hành công văn (Tùy chọn):
-            </label>
-            <input 
-              type="text" 
-              value={customDate} 
-              onChange={(e) => setCustomDate(e.target.value)} 
-              placeholder="Để trống để hệ thống tự nhận diện từ Cover"
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                borderRadius: '6px',
-                border: '1px solid #cbd5e1',
-                fontSize: '12px',
-                color: '#0f172a',
-                boxSizing: 'border-box',
-                backgroundColor: '#ffffff'
-              }}
-            />
-            <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginTop: '6px', lineHeight: '1.4' }}>
-              * Mặc định hệ thống tự động bóc tách chính xác ngày ghi trên Thư Cover.
-            </span>
-          </div>
-        </section>
-
-        {/* CỘT 2 */}
-        <section style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          padding: '24px',
-          boxShadow: '0 4px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02)',
-          border: '1px solid #e2e8f0'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <span style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: '50%',
-              backgroundColor: '#ccfbf1',
-              color: '#0f766e',
-              fontWeight: '700',
-              fontSize: '13px'
-            }}>2</span>
-            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>
-              Phương Thức Xử Lý Hồ Sơ
-            </h2>
-          </div>
-
-          {/* Danh sách 5 phương thức dạng Card */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-            
-            {/* Phương thức 1 */}
-            <div 
-              onClick={() => setProcessMode('auto_generate_cars')}
-              style={{
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: processMode === 'auto_generate_cars' ? '2px solid #0284c7' : '1px solid #e2e8f0',
-                backgroundColor: processMode === 'auto_generate_cars' ? '#f0f9ff' : '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="auto_generate_cars" 
-                  checked={processMode === 'auto_generate_cars'} 
-                  onChange={() => setProcessMode('auto_generate_cars')} 
-                  style={{ marginTop: '3px', cursor: 'pointer' }}
-                />
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: processMode === 'auto_generate_cars' ? '#0369a1' : '#0f172a' }}>
-                    1. Tự động tạo CaR từ Thư Cover
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', lineHeight: '1.4' }}>
-                    Chỉ cần tải lên Thư Cover ở Bước 1; hệ thống tự động trích xuất danh mục và tạo toàn bộ tệp CaR Round 1 theo mẫu lưu sẵn.
-                  </div>
-                </div>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <span style={{ backgroundColor: '#e0f2fe', color: '#0369a1', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>1</span>
+              <h2 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>Thư Cover EPC Đệ Trình</h2>
             </div>
 
-            {/* Phương thức 2 */}
-            <div 
-              onClick={() => setProcessMode('number_filled_cars')}
-              style={{
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: processMode === 'number_filled_cars' ? '2px solid #0d9488' : '1px solid #e2e8f0',
-                backgroundColor: processMode === 'number_filled_cars' ? '#f0fdfa' : '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="number_filled_cars" 
-                  checked={processMode === 'number_filled_cars'} 
-                  onChange={() => setProcessMode('number_filled_cars')} 
-                  style={{ marginTop: '3px', cursor: 'pointer' }}
-                />
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: processMode === 'number_filled_cars' ? '#0f766e' : '#0f172a' }}>
-                    2. Cấp số cho CaR đã có ý kiến kỹ sư
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', lineHeight: '1.4' }}>
-                    Dành cho tệp kỹ sư đã ghi nhận xét; hệ thống cấp số mới tại ô E1, xóa màu nền vàng và giữ nguyên toàn bộ ý kiến đánh giá.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Phương thức 3 */}
-            <div 
-              onClick={() => setProcessMode('auto_bump')}
-              style={{
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: processMode === 'auto_bump' ? '2px solid #7c3aed' : '1px solid #e2e8f0',
-                backgroundColor: processMode === 'auto_bump' ? '#f5f3ff' : '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="auto_bump" 
-                  checked={processMode === 'auto_bump'} 
-                  onChange={() => setProcessMode('auto_bump')} 
-                  style={{ marginTop: '3px', cursor: 'pointer' }}
-                />
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: processMode === 'auto_bump' ? '#6d28d9' : '#0f172a' }}>
-                    3. Tạo Round soát xét tiếp theo (R+1)
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', lineHeight: '1.4' }}>
-                    Nhân bản trang tính, nâng số đợt đánh giá và lưu trữ đầy đủ lịch sử phản hồi của các đợt soát xét trước.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Phương thức 4 */}
-            <div 
-              onClick={() => setProcessMode('pre_prepared')}
-              style={{
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: processMode === 'pre_prepared' ? '2px solid #475569' : '1px solid #e2e8f0',
-                backgroundColor: processMode === 'pre_prepared' ? '#f8fafc' : '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="pre_prepared" 
-                  checked={processMode === 'pre_prepared'} 
-                  onChange={() => setProcessMode('pre_prepared')} 
-                  style={{ marginTop: '3px', cursor: 'pointer' }}
-                />
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: processMode === 'pre_prepared' ? '#1e293b' : '#0f172a' }}>
-                    4. Trích xuất Thư từ bộ CaR hoàn thiện
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', lineHeight: '1.4' }}>
-                    Bộ tệp CaR đã hoàn tất; hệ thống giữ nguyên các tệp đính kèm và đọc thông tin để tạo 2 Thư Word tương ứng.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Phương thức 5 */}
-            <div 
-              onClick={() => setProcessMode('no_car_letter')}
-              style={{
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: processMode === 'no_car_letter' ? '2px solid #475569' : '1px solid #e2e8f0',
-                backgroundColor: processMode === 'no_car_letter' ? '#f8fafc' : '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="no_car_letter" 
-                  checked={processMode === 'no_car_letter'} 
-                  onChange={() => setProcessMode('no_car_letter')} 
-                  style={{ marginTop: '3px', cursor: 'pointer' }}
-                />
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: processMode === 'no_car_letter' ? '#1e293b' : '#0f172a' }}>
-                    5. Phúc đáp công văn (Không kèm CaR)
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', lineHeight: '1.4' }}>
-                    Trả lời nội dung công văn của EPC; chỉ xuất 2 Thư Word gửi Chủ đầu tư và Nhà thầu mà không kèm tệp CaR.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Ô cấu hình số bắt đầu & Tình trạng mặc định */}
-          {(processMode === 'auto_generate_cars' || processMode === 'number_filled_cars') && (
-            <div style={{
-              backgroundColor: '#f1f5f9',
-              borderRadius: '10px',
+            <label style={{
+              display: 'block',
+              border: '2px dashed #94a3b8',
+              borderRadius: '8px',
               padding: '14px',
-              border: '1px solid #e2e8f0',
-              marginBottom: '14px'
+              textAlign: 'center',
+              backgroundColor: '#f8fafc',
+              cursor: 'pointer',
+              marginBottom: '10px'
             }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#1e293b', marginBottom: '6px' }}>
-                Số CaR bắt đầu (Tự động tăng dần liên tiếp):
+              <input type="file" accept=".pdf,.xlsx,.xls" onChange={handleCoverChange} style={{ display: 'none' }} />
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#0284c7' }}>Bấm để chọn tệp Thư Cover (.pdf, .xlsx)</div>
+            </label>
+
+            {coverFile && (
+              <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', padding: '8px 10px', borderRadius: '6px', fontSize: '12px', color: '#166534', marginBottom: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                ✓ Đã tiếp nhận: <b>{coverFile.name}</b>
+              </div>
+            )}
+
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', marginBottom: '4px' }}>
+                Ngày phát hành công văn (Tùy chọn):
               </label>
               <input 
-                type="number" 
-                value={startCarNo} 
-                onChange={(e) => setStartCarNo(e.target.value)} 
-                placeholder="Ví dụ: 9905"
-                style={{
-                  width: '100%',
-                  padding: '9px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  color: '#0284c7',
-                  boxSizing: 'border-box',
-                  backgroundColor: '#ffffff'
-                }}
+                type="text" 
+                value={customDate} 
+                onChange={(e) => setCustomDate(e.target.value)} 
+                placeholder="Để trống để hệ thống tự nhận diện"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', boxSizing: 'border-box' }}
               />
+            </div>
+          </div>
+
+          {/* Card 2: 5 Phương thức xử lý */}
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '18px',
+            border: '1px solid #cbd5e1',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <span style={{ backgroundColor: '#ccfbf1', color: '#0f766e', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>2</span>
+              <h2 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>Phương Thức Xử Lý</h2>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {[
+                { id: 'auto_generate_cars', title: '1. Tự động tạo CaR từ Thư Cover', desc: 'Không cần tệp CaR; hệ thống tự tạo toàn bộ CaR R1 từ danh mục đệ trình' },
+                { id: 'number_filled_cars', title: '2. Cấp số cho CaR đã có ý kiến', desc: 'Cấp số mới tại ô E1, xóa bôi vàng và bảo toàn nội dung kỹ sư đã ghi' },
+                { id: 'auto_bump', title: '3. Tạo Round soát xét tiếp theo (R+1)', desc: 'Tạo Round mới, nâng đợt đánh giá và lưu trữ toàn bộ lịch sử phản hồi' },
+                { id: 'pre_prepared', title: '4. Trích xuất Thư từ bộ CaR hoàn thiện', desc: 'Đóng gói các tệp CaR hoàn tất và trích xuất dữ liệu để tạo 2 Thư Word' },
+                { id: 'no_car_letter', title: '5. Phúc đáp công văn (Không kèm CaR)', desc: 'Trả lời công văn thuần túy; chỉ tạo 2 Thư Word gửi Chủ đầu tư và Nhà thầu' }
+              ].map(item => (
+                <div 
+                  key={item.id}
+                  onClick={() => setProcessMode(item.id)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: processMode === item.id ? '2px solid #0284c7' : '1px solid #e2e8f0',
+                    backgroundColor: processMode === item.id ? '#f0f9ff' : '#ffffff',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <input 
+                      type="radio" 
+                      name="mode" 
+                      value={item.id} 
+                      checked={processMode === item.id} 
+                      onChange={() => setProcessMode(item.id)} 
+                      style={{ marginTop: '2px', cursor: 'pointer' }}
+                    />
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: processMode === item.id ? '#0369a1' : '#1e293b' }}>
+                        {item.title}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: '1.3' }}>
+                        {item.desc}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Card 3: Thông tin phát hành */}
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '18px',
+            border: '1px solid #cbd5e1',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <span style={{ backgroundColor: '#fef3c7', color: '#b45309', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>3</span>
+              <h2 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#0f172a' }}>Thông Tin Phát Hành</h2>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
+                  Số hiệu văn bản PECC1 phát hành:
+                </label>
+                <input 
+                  type="text" 
+                  value={qtiNo} 
+                  onChange={(e) => setQtiNo(e.target.value)} 
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: '700', boxSizing: 'border-box' }} 
+                />
+              </div>
+
+              {(processMode === 'auto_generate_cars' || processMode === 'number_filled_cars') && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
+                    Số CaR bắt đầu:
+                  </label>
+                  <input 
+                    type="number" 
+                    value={startCarNo} 
+                    onChange={(e) => setStartCarNo(e.target.value)} 
+                    placeholder="Ví dụ: 9905"
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: '700', color: '#0284c7', boxSizing: 'border-box' }} 
+                  />
+                </div>
+              )}
 
               {processMode === 'auto_generate_cars' && (
-                <div style={{ marginTop: '10px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#1e293b', marginBottom: '6px' }}>
-                    Kết quả đánh giá cho các tệp CaR tạo mới:
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#334155', marginBottom: '4px' }}>
+                    Kết quả đánh giá mặc định:
                   </label>
                   <select 
                     value={defaultStatus} 
                     onChange={(e) => setDefaultStatus(e.target.value)} 
-                    style={{
-                      width: '100%',
-                      padding: '9px 12px',
-                      borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
-                      fontWeight: '700',
-                      fontSize: '12px',
-                      backgroundColor: '#ffffff',
-                      color: defaultStatus === 'APP' ? '#166534' : '#991b1b'
-                    }}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: '700', fontSize: '12px', boxSizing: 'border-box' }}
                   >
                     <option value="APP">APPROVED (APP) - Chấp thuận</option>
                     <option value="RFC">RETURN FOR CORRECTIONS (RFC) - Trả về chỉnh sửa</option>
@@ -556,226 +364,219 @@ function App() {
                 </div>
               )}
             </div>
-          )}
+          </div>
+        </div>
 
-          {/* Ô tải lên tệp CaR (Chỉ hiện khi cần tệp từ máy) */}
-          {(processMode === 'number_filled_cars' || processMode === 'auto_bump' || processMode === 'pre_prepared') && (
-            <div>
-              <label style={{
-                display: 'block',
-                border: '2px dashed #0d9488',
-                borderRadius: '10px',
-                padding: '16px',
-                textAlign: 'center',
-                backgroundColor: '#f0fdfa',
-                cursor: 'pointer',
-                marginBottom: '12px'
-              }}>
-                <input type="file" multiple accept=".xlsx,.xls" onChange={handleCarFilesChange} style={{ display: 'none' }} />
-                <div style={{ fontSize: '20px', marginBottom: '4px' }}>📊</div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f766e' }}>
-                  Bấm để chọn danh sách tệp CaR từ máy tính
-                </div>
-                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                  Có thể chọn cùng lúc nhiều tệp Excel (.xlsx, .xls)
-                </div>
-              </label>
+        {/* BẢNG PHẢI: KHÔNG GIAN LÀM VIỆC & DANH SÁCH TÀI LIỆU RỘNG RÃI */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '22px',
+            border: '1px solid #cbd5e1',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            {/* Thanh tiêu đề & Công cụ nhanh */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '14px', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>
+                  Danh Sách Tệp CaR Cần Xử Lý
+                </h2>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                  {processMode === 'auto_generate_cars' 
+                    ? 'Chế độ tự động: Danh mục tài liệu được bóc tách trực tiếp từ Thư Cover' 
+                    : (processMode === 'no_car_letter' 
+                        ? 'Chế độ phúc đáp công văn: Không sử dụng tệp CaR' 
+                        : `Đang có ${carFiles.length} tệp CaR được chọn`)}
+                </span>
+              </div>
 
-              {carFiles.length > 0 && (
-                <div style={{
-                  maxHeight: '260px',
-                  overflowY: 'auto',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '6px',
-                  backgroundColor: '#ffffff'
-                }}>
-                  {carFiles.map((file, idx) => {
-                    const assignedNum = parseInt(startCarNo || 0) + idx;
-                    const formattedNum = assignedNum < 10000 ? String(assignedNum).padStart(4, '0') : assignedNum;
-                    return (
-                      <div key={idx} style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        backgroundColor: '#f8fafc',
-                        padding: '8px 10px',
-                        marginBottom: '4px',
-                        borderRadius: '6px',
-                        border: '1px solid #f1f5f9'
-                      }}>
-                        <div style={{ width: '70%', overflow: 'hidden' }}>
-                          <div style={{ fontSize: '12px', fontWeight: '500', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
-                            {file.name}
-                          </div>
-                          {processMode === 'number_filled_cars' && (
-                            <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: '700' }}>
-                              Số hiệu cấp: {formattedNum} CaR
-                            </span>
-                          )}
-                        </div>
-                        
-                        {processMode === 'auto_bump' ? (
-                          <select 
-                            value={carStatuses[file.name] || 'APP'} 
-                            onChange={(e) => handleStatusChange(file.name, e.target.value)} 
-                            style={{ padding: '4px 8px', borderRadius: '4px', fontWeight: '700', fontSize: '11px', border: '1px solid #cbd5e1' }}
-                          >
-                            <option value="APP">APP</option>
-                            <option value="RFC">RFC</option>
-                            <option value="AWC">AWC</option>
-                            <option value="RJ">RJ</option>
-                          </select>
-                        ) : (
-                          <span style={{
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            color: '#0f766e',
-                            backgroundColor: '#ccfbf1',
-                            padding: '4px 8px',
-                            borderRadius: '4px'
-                          }}>
-                            Tự động nhận diện
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+              {processMode === 'auto_bump' && carFiles.length > 0 && (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    onClick={() => setAllStatuses('APP')}
+                    style={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', color: '#166534', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                  >
+                    Tất cả là APP
+                  </button>
+                  <button 
+                    onClick={() => setAllStatuses('RFC')}
+                    style={{ backgroundColor: '#fef2f2', border: '1px solid #fca5a5', color: '#991b1b', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                  >
+                    Tất cả là RFC
+                  </button>
                 </div>
               )}
             </div>
-          )}
-        </section>
 
-        {/* CỘT 3 */}
-        <section style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '14px',
-          padding: '24px',
-          boxShadow: '0 4px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02)',
-          border: '1px solid #e2e8f0'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <span style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: '50%',
-              backgroundColor: '#dcfce7',
-              color: '#15803d',
-              fontWeight: '700',
-              fontSize: '13px'
-            }}>3</span>
-            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>
-              Kết Quả & Phát Hành Hồ Sơ
-            </h2>
-          </div>
-
-          <div style={{ marginBottom: '18px' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-              Số hiệu văn bản PECC1 phát hành:
-            </label>
-            <input 
-              type="text" 
-              value={qtiNo} 
-              onChange={(e) => setQtiNo(e.target.value)} 
-              style={{
-                width: '100%',
-                padding: '10px 14px',
+            {/* Ô nạp tệp CaR dạng ngang rộng rãi */}
+            {(processMode === 'number_filled_cars' || processMode === 'auto_bump' || processMode === 'pre_prepared') && (
+              <label style={{
+                display: 'block',
+                border: '2px dashed #0284c7',
                 borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '13px',
-                fontWeight: '700',
-                color: '#0f172a',
-                boxSizing: 'border-box',
-                backgroundColor: '#ffffff'
-              }} 
-            />
+                padding: '20px',
+                textAlign: 'center',
+                backgroundColor: '#f0f9ff',
+                cursor: 'pointer',
+                marginBottom: '16px'
+              }}>
+                <input type="file" multiple accept=".xlsx,.xls" onChange={handleCarFilesChange} style={{ display: 'none' }} />
+                <div style={{ fontSize: '14px', fontWeight: '700', color: '#0369a1' }}>
+                  Bấm để chọn các tệp CaR từ máy tính (Có thể chọn cùng lúc nhiều tệp)
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                  Hỗ trợ định dạng bảng tính Excel (.xlsx, .xls)
+                </div>
+              </label>
+            )}
+
+            {/* Bảng danh sách tệp rộng rãi, hiển thị tên đầy đủ */}
+            {carFiles.length > 0 && (processMode === 'number_filled_cars' || processMode === 'auto_bump' || processMode === 'pre_prepared') && (
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
+                      <th style={{ padding: '10px 14px', width: '40px' }}>STT</th>
+                      <th style={{ padding: '10px 14px' }}>Tên tệp CaR</th>
+                      {processMode === 'auto_bump' && <th style={{ padding: '10px 14px', width: '110px' }}>Đợt soát xét</th>}
+                      <th style={{ padding: '10px 14px', width: '150px' }}>Kết quả đánh giá</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {carFiles.map((file, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fcfcfd' }}>
+                        <td style={{ padding: '12px 14px', fontWeight: '700', color: '#64748b' }}>{idx + 1}</td>
+                        <td style={{ padding: '12px 14px', fontWeight: '500', color: '#0f172a', wordBreak: 'break-all' }}>
+                          {file.name}
+                        </td>
+                        {processMode === 'auto_bump' && (
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{ backgroundColor: '#f5f3ff', color: '#6d28d9', padding: '4px 8px', borderRadius: '4px', fontWeight: '700', fontSize: '11px' }}>
+                              Tạo Round mới
+                            </span>
+                          </td>
+                        )}
+                        <td style={{ padding: '12px 14px' }}>
+                          {processMode === 'auto_bump' ? (
+                            <select 
+                              value={carStatuses[file.name] || 'APP'} 
+                              onChange={(e) => handleStatusChange(file.name, e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid #cbd5e1',
+                                fontWeight: '700',
+                                fontSize: '12px',
+                                color: (carStatuses[file.name] || 'APP') === 'APP' ? '#166534' : '#991b1b',
+                                backgroundColor: (carStatuses[file.name] || 'APP') === 'APP' ? '#f0fdf4' : '#fef2f2'
+                              }}
+                            >
+                              <option value="APP">APPROVED (APP)</option>
+                              <option value="RFC">RETURN FOR CORRECTIONS (RFC)</option>
+                              <option value="AWC">APPROVED WITH COMMENTS (AWC)</option>
+                              <option value="RJ">REJECTED (RJ)</option>
+                            </select>
+                          ) : (
+                            <span style={{ backgroundColor: '#ccfbf1', color: '#0f766e', padding: '4px 8px', borderRadius: '4px', fontWeight: '700', fontSize: '11px' }}>
+                              Tự động nhận diện
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Khung điều khiển xuất hồ sơ & tiến độ */}
+            <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '18px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: isExporting ? '14px' : '0' }}>
+                <button 
+                  onClick={handleExportZipFull} 
+                  disabled={isExportDisabled} 
+                  style={{
+                    flex: 1,
+                    backgroundColor: isExportDisabled ? '#94a3b8' : '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '14px 24px',
+                    borderRadius: '8px',
+                    fontWeight: '700',
+                    fontSize: '14px',
+                    cursor: isExportDisabled ? 'not-allowed' : 'pointer',
+                    boxShadow: isExportDisabled ? 'none' : '0 2px 6px rgba(22, 163, 74, 0.25)'
+                  }}
+                >
+                  {isExporting 
+                    ? `Hệ thống đang xử lý (${elapsedSeconds}s)...` 
+                    : (processMode === 'no_car_letter' ? 'XUẤT 2 THƯ WORD (ZIP)' : 'XUẤT TRỌN BỘ HỒ SƠ PHÁT HÀNH (ZIP)')}
+                </button>
+
+                {isExporting && (
+                  <button 
+                    onClick={handleCancelExport}
+                    style={{
+                      backgroundColor: '#fef2f2',
+                      border: '1px solid #fca5a5',
+                      color: '#991b1b',
+                      padding: '14px 20px',
+                      borderRadius: '8px',
+                      fontWeight: '700',
+                      fontSize: '13px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    HỦY TIẾN TRÌNH
+                  </button>
+                )}
+              </div>
+
+              {isExporting && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '6px' }}>
+                    <span>{currentProcessingFile}</span>
+                    <span style={{ fontWeight: '700', color: '#0284c7' }}>{elapsedSeconds} giây</span>
+                  </div>
+                  <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.min(10 + elapsedSeconds * 5, 95)}%`, backgroundColor: '#16a34a', height: '100%', transition: 'width 0.5s ease' }}></div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Danh sách tệp đã phát hành */}
+            {processedResults.length > 0 && (
+              <div style={{ marginTop: '20px' }}>
+                <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '10px' }}>
+                  Hồ sơ đã xử lý hoàn tất:
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {processedResults.map((res, idx) => (
+                    <div key={idx} style={{
+                      backgroundColor: res.status.includes('APP') || res.status.includes('REVIEWED') ? '#f0fdf4' : '#fef2f2',
+                      border: `1px solid ${res.status.includes('APP') || res.status.includes('REVIEWED') ? '#bbf7d0' : '#fecaca'}`,
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      fontSize: '12px'
+                    }}>
+                      <div style={{ fontWeight: '700', color: '#0f172a' }}>{res.doc_no}</div>
+                      <div style={{ color: '#0284c7', margin: '2px 0' }}>Tệp phát hành: <b>{res.assigned_car}</b></div>
+                      <div style={{ fontWeight: '700', color: res.status.includes('APP') ? '#166534' : '#991b1b' }}>
+                        Đánh giá: {res.status}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
 
-          <button 
-            onClick={handleExportZipFull} 
-            disabled={isExportDisabled} 
-            style={{
-              width: '100%',
-              background: isExportDisabled ? '#cbd5e1' : 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
-              color: '#ffffff',
-              border: 'none',
-              padding: '14px',
-              borderRadius: '10px',
-              fontWeight: '700',
-              fontSize: '14px',
-              letterSpacing: '0.2px',
-              cursor: isExportDisabled ? 'not-allowed' : 'pointer',
-              marginBottom: '16px',
-              boxShadow: isExportDisabled ? 'none' : '0 4px 12px rgba(22, 163, 74, 0.25)',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            {isExporting 
-              ? `Đang xử lý hồ sơ (${progress}%)...` 
-              : (processMode === 'no_car_letter' ? 'XUẤT 2 THƯ WORD (ZIP)' : 'XUẤT TRỌN BỘ HỒ SƠ (ZIP)')}
-          </button>
-          
-          {(isExporting || progress > 0) && (
-            <div style={{
-              backgroundColor: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              padding: '14px',
-              borderRadius: '10px',
-              marginBottom: '16px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', marginBottom: '8px' }}>
-                <span style={{ color: '#475569' }}>Tiến độ thực hiện:</span>
-                <span style={{ color: '#0284c7' }}>{progress}%</span>
-              </div>
-              <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
-                <div style={{
-                  width: `${progress}%`,
-                  backgroundColor: '#16a34a',
-                  height: '100%',
-                  transition: 'width 0.25s ease-in-out'
-                }}></div>
-              </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '8px 0 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {currentProcessingFile}
-              </p>
-            </div>
-          )}
-          
-          {processedResults.length > 0 && (
-            <div style={{ maxHeight: '340px', overflowY: 'auto' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>
-                Hồ sơ đã xử lý thành công:
-              </div>
-              {processedResults.map((res, idx) => (
-                <div key={idx} style={{
-                  backgroundColor: res.status.includes('APP') || res.status.includes('REVIEWED') ? '#f0fdf4' : '#fef2f2',
-                  border: `1px solid ${res.status.includes('APP') || res.status.includes('REVIEWED') ? '#bbf7d0' : '#fecaca'}`,
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  marginBottom: '8px',
-                  fontSize: '12px'
-                }}>
-                  <p style={{ margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#0f172a' }}>
-                    <strong>Mã văn bản:</strong> {res.doc_no}
-                  </p>
-                  <p style={{ margin: '0 0 4px 0', color: '#0284c7' }}>
-                    <strong>Tệp phát hành:</strong> <b>{res.assigned_car}</b>
-                  </p>
-                  <p style={{ margin: 0 }}>
-                    <strong>Đánh giá:</strong> <span style={{
-                      fontWeight: '700',
-                      color: res.status.includes('APP') || res.status.includes('REVIEWED') ? '#166534' : '#991b1b'
-                    }}>{res.status}</span>
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        </div>
       </main>
     </div>
   );
