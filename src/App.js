@@ -78,13 +78,15 @@ function App() {
     }
 
     setIsExporting(true);
-    setCurrentStepText('Đang nén dữ liệu và tải tệp lên máy chủ xử lý...');
+    setCurrentStepText(`Đang tải lên ${carFiles.length > 0 ? carFiles.length + ' tệp CaR và ' : ''}Thư Cover sang máy chủ...`);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    
+    // Mở rộng thời gian chờ lên 10 phút (600s) cho gói hồ sơ lớn
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 120000); // Giới hạn 120s
+    }, 600000);
 
     const formData = new FormData();
     if (coverFile) formData.append('cover_file', coverFile);
@@ -104,7 +106,7 @@ function App() {
     }
 
     try {
-      setCurrentStepText('Máy chủ đang phân tích bảng Transmittal, cập nhật CaR và tạo 2 Thư Word...');
+      setCurrentStepText('Máy chủ đang xử lý nhân bản các Round, khớp danh mục bản vẽ và tạo 2 Thư Word...');
 
       const response = await fetch('https://toannguyen-autooffice.onrender.com/api/export-zip-full', {
         method: 'POST',
@@ -119,7 +121,7 @@ function App() {
         throw new Error(errText);
       }
 
-      setCurrentStepText('Đang đóng gói tệp nén ZIP và tải về máy tính...');
+      setCurrentStepText('Đang hoàn tất tệp nén ZIP và tải về máy tính...');
 
       try {
         const itemsHeader = response.headers.get('X-Processed-Items');
@@ -143,10 +145,10 @@ function App() {
       downloadLink.remove();
       
       setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1000);
-      setCurrentStepText('Đã hoàn tất xử lý và xuất toàn bộ hồ sơ thành công!');
+      setCurrentStepText('Đã xuất thành công toàn bộ hồ sơ!');
     } catch (err) {
       if (err.name === 'AbortError') {
-        alert("Thời gian phản hồi vượt quá 2 phút do mạng hoặc tệp quá nặng. Kính mời bấm xuất lại.");
+        alert("Tiến trình đã được dừng lại theo yêu cầu.");
       } else {
         alert("Thông báo từ hệ thống: " + err.message);
       }
@@ -224,7 +226,7 @@ function App() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '18px', animation: 'spin 1s infinite linear' }}>⏳</span>
+                <span style={{ fontSize: '18px' }}>⏳</span>
                 <span style={{ fontSize: '14px', fontWeight: '700', color: '#0369a1' }}>
                   ĐANG TIẾN HÀNH XỬ LÝ HỒ SƠ ({elapsedSeconds} giây)
                 </span>
@@ -247,7 +249,6 @@ function App() {
               </button>
             </div>
             
-            {/* Thanh tiến độ chuyển động mượt mà */}
             <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: '6px', height: '10px', overflow: 'hidden' }}>
               <div style={{
                 width: '100%',
@@ -383,7 +384,6 @@ function App() {
             )}
           </div>
 
-          {/* 5 Thẻ lựa chọn */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
             
             <div 
@@ -468,7 +468,6 @@ function App() {
 
           </div>
 
-          {/* Ô số bắt đầu */}
           {(processMode === 'auto_generate_cars' || processMode === 'number_filled_cars') && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: '#f8fafc',
@@ -506,7 +505,6 @@ function App() {
             </div>
           )}
 
-          {/* Danh sách tệp CaR */}
           {(processMode === 'number_filled_cars' || processMode === 'auto_bump' || processMode === 'pre_prepared') && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
